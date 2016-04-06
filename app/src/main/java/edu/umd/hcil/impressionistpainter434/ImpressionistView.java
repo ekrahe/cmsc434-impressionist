@@ -403,8 +403,8 @@ public class ImpressionistView extends View {
                 _paint.setAlpha(_alpha);
                 if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
                     double rad = (_spinAngle / 180) * Math.PI;
-                    float endX = (float) (curTouchX + 10*(Math.cos(rad)));
-                    float endY = (float) (curTouchY + 10*(Math.sin(rad)));
+                    float endX = (float) (curTouchX + 45*(Math.cos(rad)));
+                    float endY = (float) (curTouchY + 45*(Math.sin(rad)));
                     _spinAngle = (_spinAngle + 1) % 360;
                     _offScreenCanvas.drawLine(curTouchX, curTouchY, endX, endY, _paint);
                 } else _offScreenCanvas.drawPoint(curTouchX, curTouchY, _paint);
