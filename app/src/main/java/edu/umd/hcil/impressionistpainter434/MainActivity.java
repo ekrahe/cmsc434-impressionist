@@ -154,6 +154,14 @@ public class MainActivity extends AppCompatActivity implements OnMenuItemClickLi
                 Toast.makeText(this, "Speed Square Brush", Toast.LENGTH_SHORT).show();
                 _impressionistView.setBrushType(BrushType.SpeedSquare);
                 return true;
+            case R.id.menuSpin:
+                Toast.makeText(this, "Spin Brush", Toast.LENGTH_SHORT).show();
+                _impressionistView.setBrushType(BrushType.Spin);
+                return true;
+            case R.id.menuSpeedSpin:
+                Toast.makeText(this, "Speed Spin Brush", Toast.LENGTH_SHORT).show();
+                _impressionistView.setBrushType(BrushType.SpeedSpin);
+                return true;
         }
         return false;
     }

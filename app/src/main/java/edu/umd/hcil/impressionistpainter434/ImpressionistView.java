@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 
 /**
  * Created by jon on 3/20/2016.
+ * Edited by eddie after that
  */
 public class ImpressionistView extends View {
 
@@ -33,7 +35,9 @@ public class ImpressionistView extends View {
     private long _lastPointTime = -1;
     private Paint _paintBorder = new Paint();
     private BrushType _brushType = BrushType.Circle;
-    private float _minBrushRadius = 60;
+    private float _minBrushRadius = 60f;
+    private float _minSpinBrushRadius = 30f;
+    private double _spinAngle = 0;
 
     private Rect _bounds = null;
 
@@ -86,17 +90,14 @@ public class ImpressionistView extends View {
 
     private class ForgetMENot {
 
-        public ArrayList<Float> xs, ys;
-        public float x, y;
+        public ArrayList<Point> pts;
+        public Point p;
 
         public ForgetMENot(MotionEvent me) {
-            xs = new ArrayList<>();
-            ys = new ArrayList<>();
-            x = me.getX();
-            y = me.getY();
+            p = new Point((int) me.getX(), (int) me.getY());
+            pts = new ArrayList<>();
             for (int i = 0; i < me.getHistorySize(); i++) {
-                xs.add(me.getHistoricalX(i));
-                ys.add(me.getHistoricalY(i));
+                pts.add(new Point((int) me.getHistoricalX(i), (int) me.getHistoricalY(i)));
             }
         }
 
@@ -107,11 +108,13 @@ public class ImpressionistView extends View {
         ArrayList<ForgetMENot> touches;
         BrushType brush;
         ArrayList<Float> scales;
+        double startAngle;
 
-        public LotsOfTouches(BrushType bt) {
+        public LotsOfTouches(BrushType bt, double s) {
             brush = bt;
             touches = new ArrayList<>();
             scales = new ArrayList<>();
+            startAngle = s;
         }
 
         public void addTouch(ForgetMENot fmn, float size) {
@@ -147,6 +150,10 @@ public class ImpressionistView extends View {
      */
     public void setBrushType(BrushType brushType) {
         _brushType = brushType;
+        _spinAngle = 0;
+        if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
+            _paint.setStrokeWidth(_minSpinBrushRadius);
+        } else _paint.setStrokeWidth(_minBrushRadius);
     }
 
     /**
@@ -160,6 +167,7 @@ public class ImpressionistView extends View {
             _offScreenCanvas.drawRect(0, 0, this.getWidth(), this.getHeight(), paint);
             _undoStack.clear();
             _redoStack.clear();
+            _spinAngle = 0;
         }
         _bounds = null;
         invalidate();
@@ -173,23 +181,34 @@ public class ImpressionistView extends View {
     }
 
     public boolean undo() {
+        Paint p = new Paint(_paint);
+        double spin = _spinAngle;
+        BrushType bt = _brushType;
         if(_undoStack.size() > 0) {
             _redoStack.add(_undoStack.remove(_undoStack.size() - 1));
             internalClear();
             for (LotsOfTouches lot : _undoStack) {
-                BrushType bt = lot.brush;
-                if (bt == BrushType.Circle || bt == BrushType.SpeedCircle) {
-                    _paint.setStrokeCap(Paint.Cap.ROUND);
-                } else {
+                _brushType = lot.brush;
+                if (_brushType == BrushType.Square || _brushType == BrushType.SpeedSquare) {
                     _paint.setStrokeCap(Paint.Cap.SQUARE);
+                } else {
+                    _paint.setStrokeCap(Paint.Cap.ROUND);
                 }
 
+                _spinAngle = lot.startAngle;
+
                 for (int i = 0; i < lot.touches.size(); i++) {
-                    _paint.setStrokeWidth(_minBrushRadius * lot.scales.get(i));
+                    float brushRadius =
+                            (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin)
+                                    ? _minSpinBrushRadius : _minBrushRadius;
+                    _paint.setStrokeWidth(brushRadius * lot.scales.get(i));
                     redrawPoints(lot.touches.get(i));
                 }
             }
             invalidate();
+            _paint.set(p);
+            _spinAngle = spin;
+            _brushType = bt;
             if (_undoStack.size() == 0) return true;
             return false;
         }
@@ -197,22 +216,33 @@ public class ImpressionistView extends View {
     }
 
     public boolean redo() {
+        Paint p = new Paint(_paint);
+        double spin = _spinAngle;
+        BrushType bt = _brushType;
         if(_redoStack.size() > 0) {
             LotsOfTouches lot = _redoStack.remove(_redoStack.size() - 1);
             _undoStack.add(lot);
 
-            BrushType bt = lot.brush;
-            if (bt == BrushType.Circle || bt == BrushType.SpeedCircle) {
-                _paint.setStrokeCap(Paint.Cap.ROUND);
-            } else {
+            _brushType = lot.brush;
+            if (_brushType == BrushType.Square || _brushType == BrushType.SpeedSquare) {
                 _paint.setStrokeCap(Paint.Cap.SQUARE);
+            } else {
+                _paint.setStrokeCap(Paint.Cap.ROUND);
             }
 
+            _spinAngle = lot.startAngle;
+
             for (int i = 0; i < lot.touches.size(); i++) {
-                _paint.setStrokeWidth(_minBrushRadius * lot.scales.get(i));
+                float brushRadius =
+                        (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin)
+                                ? _minSpinBrushRadius : _minBrushRadius;
+                _paint.setStrokeWidth(brushRadius * lot.scales.get(i));
                 redrawPoints(lot.touches.get(i));
             }
             invalidate();
+            _paint.set(p);
+            _spinAngle = spin;
+            _brushType = bt;
             if (_redoStack.size() == 0) return true;
             return false;
         }
@@ -240,7 +270,7 @@ public class ImpressionistView extends View {
 
         switch(motionEvent.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                _undoStack.add(new LotsOfTouches(_brushType));
+                _undoStack.add(new LotsOfTouches(_brushType, _spinAngle));
             case MotionEvent.ACTION_MOVE:
                 setDrawingPaint(motionEvent);
                 drawPoints(motionEvent);
@@ -259,14 +289,15 @@ public class ImpressionistView extends View {
         float curTouchX = motionEvent.getX();
         float curTouchY = motionEvent.getY();
 
-        if (_brushType == BrushType.Circle || _brushType == BrushType.SpeedCircle) {
-            _paint.setStrokeCap(Paint.Cap.ROUND);
-        } else {
+        if (_brushType == BrushType.Square || _brushType == BrushType.SpeedSquare) {
             _paint.setStrokeCap(Paint.Cap.SQUARE);
+        } else {
+            _paint.setStrokeCap(Paint.Cap.ROUND);
         }
 
         if (_lastPointTime != -1 &&
-                (_brushType == BrushType.SpeedCircle || _brushType == BrushType.SpeedSquare)) {
+                (_brushType == BrushType.SpeedCircle || _brushType == BrushType.SpeedSquare
+                        || _brushType == BrushType.SpeedSpin)) {
             long elapsedTime = SystemClock.elapsedRealtime() - _lastPointTime;
 
             int history = motionEvent.getHistorySize();
@@ -275,10 +306,13 @@ public class ImpressionistView extends View {
 
             double dist = Math.sqrt((curTouchX - sx) * (curTouchX - sx) + (curTouchY - sy) * (curTouchY - sy));
             float scaleFactor = Math.min(1 + (float) (dist / elapsedTime), 6f);
-            _paint.setStrokeWidth(_minBrushRadius * scaleFactor);
+
+            float brushRadius = (_brushType == BrushType.SpeedSpin)
+                    ? _minSpinBrushRadius : _minBrushRadius;
+            _paint.setStrokeWidth(brushRadius * scaleFactor);
+
             _undoStack.get(_undoStack.size() - 1).addTouch(new ForgetMENot(motionEvent), scaleFactor);
         } else {
-            _paint.setStrokeWidth(_minBrushRadius);
             _undoStack.get(_undoStack.size() - 1).addTouch(new ForgetMENot(motionEvent), 1);
         }
     }
@@ -303,7 +337,13 @@ public class ImpressionistView extends View {
                     _paint.setColor(_picture.getPixel((int) touchX - _bounds.left,
                             (int) touchY - _bounds.top));
                     _paint.setAlpha(_alpha);
-                    _offScreenCanvas.drawPoint(touchX, touchY, _paint);
+                    if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
+                        double rad = (_spinAngle / 180) * Math.PI;
+                        float endX = (float) (touchX + 45*(Math.cos(rad)));
+                        float endY = (float) (touchY + 45*(Math.sin(rad)));
+                        _spinAngle = (_spinAngle + 1) % 360;
+                        _offScreenCanvas.drawLine(touchX, touchY, endX, endY, _paint);
+                    } else _offScreenCanvas.drawPoint(touchX, touchY, _paint);
                 }
             }
 
@@ -311,41 +351,49 @@ public class ImpressionistView extends View {
                 _paint.setColor(_picture.getPixel((int) curTouchX - _bounds.left,
                         (int) curTouchY - _bounds.top));
                 _paint.setAlpha(_alpha);
-                _offScreenCanvas.drawPoint(curTouchX, curTouchY, _paint);
+                if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
+                    double rad = (_spinAngle / 180) * Math.PI;
+                    float endX = (float) (curTouchX + 45*(Math.cos(rad)));
+                    float endY = (float) (curTouchY + 45*(Math.sin(rad)));
+                    _spinAngle = (_spinAngle + 1) % 360;
+                    _offScreenCanvas.drawLine(curTouchX, curTouchY, endX, endY, _paint);
+                } else _offScreenCanvas.drawPoint(curTouchX, curTouchY, _paint);
 
                 _imageView.setPreviewPoint((int) curTouchX, (int) curTouchY, _paint.getColor());
             } else {
                 _imageView.setPreviewPoint(-1, -1, -1);
             }
             invalidate();
-
         }
-
-        //long endTime = SystemClock.elapsedRealtime();
-        //_elapsedTimeProcessingTouchEventsInMs += endTime - startTime;
     }
 
     private void redrawPoints(ForgetMENot fmn) {
-        float curTouchX = fmn.x;
-        float curTouchY = fmn.y;
+        float curTouchX = fmn.p.x;
+        float curTouchY = fmn.p.y;
 
         // For efficiency, motion events with ACTION_MOVE may batch together multiple movement samples within a single object.
         // The most current pointer coordinates are available using getX(int) and getY(int).
         // Earlier coordinates within the batch are accessed using getHistoricalX(int, int) and getHistoricalY(int, int).
         // See: http://developer.android.com/reference/android/view/MotionEvent.html
-        int historySize = fmn.xs.size();
+        int historySize = fmn.pts.size();
 
         if (_offScreenBitmap != null) {
             for (int i = 0; i < historySize; i++) {
 
-                float touchX = fmn.xs.get(i);
-                float touchY = fmn.ys.get(i);
+                float touchX = fmn.pts.get(i).x;
+                float touchY = fmn.pts.get(i).y;
 
                 if (_bounds.contains((int) touchX, (int) touchY)) {
                     _paint.setColor(_picture.getPixel((int) touchX - _bounds.left,
                             (int) touchY - _bounds.top));
                     _paint.setAlpha(_alpha);
-                    _offScreenCanvas.drawPoint(touchX, touchY, _paint);
+                    if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
+                        double rad = (_spinAngle / 180) * Math.PI;
+                        float endX = (float) (touchX + 45*(Math.cos(rad)));
+                        float endY = (float) (touchY + 45*(Math.sin(rad)));
+                        _spinAngle = (_spinAngle + 1) % 360;
+                        _offScreenCanvas.drawLine(touchX, touchY, endX, endY, _paint);
+                    } else _offScreenCanvas.drawPoint(touchX, touchY, _paint);
                 }
             }
 
@@ -353,7 +401,13 @@ public class ImpressionistView extends View {
                 _paint.setColor(_picture.getPixel((int) curTouchX - _bounds.left,
                         (int) curTouchY - _bounds.top));
                 _paint.setAlpha(_alpha);
-                _offScreenCanvas.drawPoint(curTouchX, curTouchY, _paint);
+                if (_brushType == BrushType.Spin || _brushType == BrushType.SpeedSpin) {
+                    double rad = (_spinAngle / 180) * Math.PI;
+                    float endX = (float) (curTouchX + 10*(Math.cos(rad)));
+                    float endY = (float) (curTouchY + 10*(Math.sin(rad)));
+                    _spinAngle = (_spinAngle + 1) % 360;
+                    _offScreenCanvas.drawLine(curTouchX, curTouchY, endX, endY, _paint);
+                } else _offScreenCanvas.drawPoint(curTouchX, curTouchY, _paint);
             }
             invalidate();
         }

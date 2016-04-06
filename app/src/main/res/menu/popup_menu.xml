@@ -5,13 +5,19 @@
         android:title="Circle"
         />
 
-    <item android:id="@+id/menuSquare"
-        android:title="Square" />
-
     <item android:id="@+id/menuSpeedCircle"
         android:title="Speed Circle" />
 
+    <item android:id="@+id/menuSquare"
+        android:title="Square" />
+
     <item android:id="@+id/menuSpeedSquare"
         android:title="Speed Square" />
+
+    <item android:id="@+id/menuSpin"
+        android:title="Spin" />
+
+    <item android:id="@+id/menuSpeedSpin"
+        android:title="Speed Spin" />
 
 </menu>
